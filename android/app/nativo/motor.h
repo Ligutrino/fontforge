@@ -24,4 +24,10 @@ int motor_add_extrema(int unicode, int capa);
 const char *motor_glyph_name(int clave);
 int motor_image_info(int clave, int capa, double *salida, int max);
 int motor_image_pixels(int clave, int capa, int indice, int *salida, int max);
+int motor_glyph_by_name(const char *nombre, int *clave);
+int motor_shift_images(int clave, double dx);
+int motor_get_kern(int izq, int der, int *origen);
+int motor_set_kern(int izq, int der, int valor);
+int motor_kern_pairs(int *salida, int max);
+int motor_kern_class_count(void);
 #endif

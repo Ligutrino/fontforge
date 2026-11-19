@@ -146,3 +146,38 @@ JNIEXPORT jintArray JNICALL F(pixelesImagen)(JNIEnv *env, jclass cls, jint clave
     free(buf);
     return a;
 }
+
+/* ---- Métricas y kerning ---- */
+JNIEXPORT jint JNICALL F(glifoPorNombre)(JNIEnv *env, jclass cls, jstring nombre) {
+    if (nombre == NULL) return 0;
+    const char *c = (*env)->GetStringUTFChars(env, nombre, NULL);
+    int clave = 0;
+    int ok = motor_glyph_by_name(c, &clave);
+    (*env)->ReleaseStringUTFChars(env, nombre, c);
+    return ok ? clave : -1;
+}
+JNIEXPORT jboolean JNICALL F(moverImagenes)(JNIEnv *env, jclass cls, jint clave, jdouble dx) {
+    return motor_shift_images(clave, dx) ? JNI_TRUE : JNI_FALSE;
+}
+JNIEXPORT jintArray JNICALL F(kern)(JNIEnv *env, jclass cls, jint izq, jint der) {
+    int v[2];
+    v[0] = motor_get_kern(izq, der, &v[1]);
+    jintArray a = (*env)->NewIntArray(env, 2);
+    (*env)->SetIntArrayRegion(env, a, 0, 2, v);
+    return a;
+}
+JNIEXPORT jboolean JNICALL F(fijarKern)(JNIEnv *env, jclass cls, jint izq, jint der, jint valor) {
+    return motor_set_kern(izq, der, valor) ? JNI_TRUE : JNI_FALSE;
+}
+JNIEXPORT jintArray JNICALL F(paresKern)(JNIEnv *env, jclass cls) {
+    int n = motor_kern_pairs(NULL, 0);
+    int *buf = malloc(sizeof(int) * 3 * (n > 0 ? n : 1));
+    motor_kern_pairs(buf, 3 * n);
+    jintArray a = (*env)->NewIntArray(env, 3 * n);
+    (*env)->SetIntArrayRegion(env, a, 0, 3 * n, buf);
+    free(buf);
+    return a;
+}
+JNIEXPORT jint JNICALL F(clasesKern)(JNIEnv *env, jclass cls) {
+    return motor_kern_class_count();
+}

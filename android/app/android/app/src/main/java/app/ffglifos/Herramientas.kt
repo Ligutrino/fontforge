@@ -47,6 +47,7 @@ class Opciones {
     var snapEnteros = false           // SnapToInt
     var snapAPuntos = true
     var manijasDeTodos = false
+    var umbralArrastre = 12           // píxeles que hay que mover el lápiz antes de arrastrar puntos (evita moverlos al seleccionar)
     var elipse = false                // Rectángulo/elipse: dibuja elipse
     var desdeCentro = false           // Rectángulo/elipse: arrastrar desde el centro
     var lados = 5                     // Polígono/estrella

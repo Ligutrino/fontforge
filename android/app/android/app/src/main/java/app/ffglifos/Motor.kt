@@ -42,4 +42,18 @@ object Motor {
     @JvmStatic external fun imagenes(clave: Int, capa: Int): DoubleArray
     /** Píxeles ARGB de una imagen (ancho × alto, por filas desde arriba). */
     @JvmStatic external fun pixelesImagen(clave: Int, capa: Int, indice: Int): IntArray?
+
+    // ---- Métricas y kerning ----
+    /** Clave del glifo con ese nombre, o -1 si no existe. */
+    @JvmStatic external fun glifoPorNombre(nombre: String): Int
+    /** Mueve en horizontal las imágenes de todas las capas del glifo. */
+    @JvmStatic external fun moverImagenes(clave: Int, dx: Double): Boolean
+    /** Kerning del par: [valor, origen] con origen 0 nada, 1 par propio, 2 clase de kerning. */
+    @JvmStatic external fun kern(izq: Int, der: Int): IntArray
+    /** Fija el kerning del par (0 lo quita). Si el par está en una clase, cambia la clase. */
+    @JvmStatic external fun fijarKern(izq: Int, der: Int, valor: Int): Boolean
+    /** Todos los pares propios: tríos izq, der, valor. */
+    @JvmStatic external fun paresKern(): IntArray
+    /** Cantidad de clases de kerning de la fuente. */
+    @JvmStatic external fun clasesKern(): Int
 }
