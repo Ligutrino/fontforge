@@ -1,0 +1,11 @@
+# Prueba del motor: crea una fuente con un glifo, guarda .sfd, la vuelve a abrir y exporta .ttf
+New()
+SetFontNames("PruebaAndroid","Prueba","Prueba Android")
+Select("A")
+SetWidth(600)
+Print("glifo A creado")
+Save($1 + "/prueba.sfd")
+Close()
+Open($1 + "/prueba.sfd")
+Generate($1 + "/prueba.ttf")
+Print("OK: prueba.sfd y prueba.ttf generados en " + $1)

@@ -1,0 +1,11 @@
+# Biblioteca nativa de la app: puente JNI entre Kotlin y libfontforge.
+cmake_minimum_required(VERSION 3.16)
+project(ffglifos C)
+set(FF_SRC "" CACHE PATH "Fuentes de FontForge")
+set(FF_BUILD "" CACHE PATH "Carpeta de compilación de FontForge")
+add_library(ffglifos SHARED motor.c ajuste.c jni.c)
+target_include_directories(ffglifos PRIVATE ${FF_SRC}/fontforge ${FF_SRC}/inc ${FF_BUILD}/inc)
+target_link_libraries(ffglifos PRIVATE ${FF_BUILD}/lib/libfontforge.so m)
+if(ANDROID)
+  target_link_libraries(ffglifos PRIVATE log)
+endif()
