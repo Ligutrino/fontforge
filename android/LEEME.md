@@ -11,7 +11,7 @@ Descomprime este paquete en la misma carpeta `fontforge-android` del paso 2, par
 
 ```bash
 cd ~/ruta/donde/esta            # la carpeta que contiene fontforge-android/
-tar xzf ffglifos-fondos.tar.gz  # reemplaza los scripts y app/
+tar xzf ffglifos-kerning.tar.gz # reemplaza los scripts y app/
 cd fontforge-android
 chmod +x compilar.sh
 ./compilar.sh
@@ -67,7 +67,7 @@ A la izquierda está la **caja de herramientas** en dos columnas, como en FontFo
 
 | Acción | Cómo |
 | --- | --- |
-| Seleccionar | Flecha y tocar un punto. Con Shift activo se suman o quitan puntos. Si arrastras en el vacío, seleccionas con un recuadro. Un doble toque selecciona el contorno completo. Tocar una curva selecciona sus dos extremos. |
+| Seleccionar | Flecha y tocar un punto. El punto no se mueve hasta que arrastras más de 12 píxeles; si aún se mueve al seleccionar, sube ese valor en Ajustes. Con Shift activo se suman o quitan puntos. Si arrastras en el vacío, seleccionas con un recuadro. Un doble toque selecciona el contorno completo. Tocar una curva selecciona sus dos extremos. |
 | Mover | Arrastrar, o usar las flechas de la barra. |
 | Ajustar una curva | Seleccionar el punto y arrastrar sus X (manijas). Los puntos curvos mantienen las manijas alineadas. |
 | Agregar un punto | Agregar punto (curvo, H/V, esquina o tangente) y tocar la línea negra. |
@@ -93,6 +93,22 @@ Las imágenes que una fuente trae en la capa **Atrás** o **Fore** (por ejemplo,
 
 Los glifos sin código Unicode (como `one.peq` o `dieresis.alt`) aparecen al final de la pantalla de glifos, con su nombre.
 
+## Métricas y kerning
+
+**En la ventana del glifo**, el menú **Métricas** tiene Ancho…, Margen izquierdo…, Margen derecho…, Centrar en el ancho y Ventana de métricas. Bajo la línea base se ven los márgenes (`izq` y `der`) y la barra de estado también los muestra. Al cambiar el margen izquierdo se mueven el dibujo, la capa Atrás y sus imágenes, y el margen derecho no cambia, igual que en FontForge. Todo se deshace con ↶.
+
+**Ventana de métricas** (botón *Métricas y kerning* en la pantalla de glifos):
+
+- Arriba escribes el texto que quieres ver. Para un glifo sin código Unicode, escribe `/nombre` (por ejemplo `/one.peq`), y `//` para la barra.
+- **Con el S Pen:** toca un glifo para elegirlo (queda azul). Arrástralo hacia los lados para cambiar el **kerning** con el glifo anterior; el valor se ve en morado sobre el par. Arrastra la **línea roja** para cambiar el ancho y la **verde** para el margen izquierdo.
+- **Con los dedos:** uno mueve la vista y dos hacen zoom.
+- **Panel de abajo:** Ancho, Izq, Der y Kern del glifo elegido. Toca uno para que los botones −10, −1, +1 y +10 lo cambien, y tócalo otra vez para escribir el valor. *Centrar* deja iguales los dos márgenes.
+- **Pares de kerning…** lista todos los pares de la fuente; toca uno para verlo en la línea de texto.
+- **Editar glifo** abre el glifo elegido; *‹ Volver* regresa a la ventana de métricas.
+- **↶ Deshacer** deshace los cambios hechos en esta ventana.
+
+El kerning se guarda en el .sfd y sale en el .ttf y el .otf (tabla GPOS 'kern'). Si la fuente ya usa **clases de kerning** y el par está en una, se cambia la clase (y con ella todos sus pares), como en FontForge; el botón Kern lo indica con "(clase)".
+
 ## Si algo falla
 
 Envíame las últimas 40 líneas de `./compilar.sh`. Si la app se cierra sola en la tablet, dime qué estabas haciendo.
@@ -106,7 +122,7 @@ Envíame las últimas 40 líneas de `./compilar.sh`. Si la app se cierra sola en
 | `build-app.sh` | Compila el puente nativo y la app, y genera el .apk |
 | `compilar.sh` | Lo que ejecutas tú |
 | `app/nativo/` | Puente en C entre la app y FontForge: `motor.c` y `jni.c`, más el ajuste de trazos a curvas en `ajuste.c` |
-| `app/android/` | La app en Kotlin: `EditorView.kt` (lienzo, herramientas y S Pen), `Geometria.kt` (cuchillo, transformaciones y figuras), `MainActivity.kt` (pantallas, menús y archivos) |
+| `app/android/` | La app en Kotlin: `EditorView.kt` (lienzo, herramientas y S Pen), `Geometria.kt` (cuchillo, transformaciones y figuras), `MainActivity.kt` (pantallas, menús y archivos), `Metricas.kt`, `MetricasView.kt` y `PantallaMetricas.kt` (métricas y kerning) |
 | `prueba.pe` | Prueba del motor por consola (paso 2) |
 
 Licencia: GPLv3 o posterior, igual que FontForge.

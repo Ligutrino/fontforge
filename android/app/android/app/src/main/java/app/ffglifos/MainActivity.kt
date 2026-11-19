@@ -49,6 +49,10 @@ class MainActivity : Activity() {
     private lateinit var estado: TextView
     private lateinit var etiquetaGlifo: TextView
     private var enEditor = false
+    private var enMetricas = false
+    /** Si el editor se abrió desde la ventana de métricas, al volver regresa a ella. */
+    private var editorDesdeMetricas = false
+    private lateinit var pantallaMetricas: PantallaMetricas
     private var glifoActual = 'A'.code
 
     private var ascenso = 800.0
@@ -71,6 +75,7 @@ class MainActivity : Activity() {
         }
         construirCuadricula()
         construirEditor()
+        construirMetricas()
         cargarAjustes()
         mostrarCuadricula()
     }
@@ -82,7 +87,11 @@ class MainActivity : Activity() {
 
     @Deprecated("Activity sin AndroidX")
     override fun onBackPressed() {
-        if (enEditor) mostrarCuadricula() else super.onBackPressed()
+        when {
+            enEditor -> salirDelEditor()
+            enMetricas -> mostrarCuadricula()
+            else -> super.onBackPressed()
+        }
     }
 
     private fun leerMetricas() {
@@ -134,11 +143,14 @@ class MainActivity : Activity() {
         fila.addView(boton("Exportar .ttf") { pedirDestino("ttf") })
         fila.addView(boton("Exportar .otf") { pedirDestino("otf") })
         fila.addView(boton("Otro glifo…") { pedirOtroGlifo() })
+        fila.addView(boton("Métricas y kerning") { mostrarMetricas() })
         return desplazable(fila)
     }
 
     private fun mostrarCuadricula() {
         enEditor = false
+        enMetricas = false
+        editorDesdeMetricas = false
         raiz.removeAllViews()
         titulo.text = Motor.familia() ?: "Fuente"
         raiz.addView(titulo)
@@ -222,6 +234,7 @@ class MainActivity : Activity() {
             OpNativa.SOLAPAMIENTOS -> Motor.quitarSolapamientosCapa(glifoActual, capa)
         }
         override fun informar(texto: String) { estado.text = texto; actualizarCaja() }
+        override fun moverImagenes(dx: Double) { Motor.moverImagenes(glifoActual, dx); hayCambiosSinExportar = true }
         override fun imagenes(capa: Int): List<EditorView.ImagenFondo> {
             val info = Motor.imagenes(glifoActual, capa)
             return (0 until info.size / 6).mapNotNull { i ->
@@ -249,7 +262,7 @@ class MainActivity : Activity() {
 
         // Barra superior con los menús
         barraEditor = fila()
-        barraEditor.addView(boton("‹ Glifos") { mostrarCuadricula() })
+        barraEditor.addView(boton("‹ Volver") { salirDelEditor() })
         barraEditor.addView(etiquetaGlifo)
         barraEditor.addView(botonMenu("Edición", listOf(
             "Deshacer" to { editor.deshacer() }, "Rehacer" to { editor.rehacer() },
@@ -266,6 +279,12 @@ class MainActivity : Activity() {
             "Añadir extremos" to { editor.operacion(OpNativa.EXTREMOS) },
             "Corregir dirección" to { editor.operacion(OpNativa.DIRECCION) },
             "Quitar solapamientos" to { editor.operacion(OpNativa.SOLAPAMIENTOS) })))
+        barraEditor.addView(botonMenu("Métricas", listOf(
+            "Ancho…" to { pedirMetrica(Metrica.ANCHO) },
+            "Margen izquierdo…" to { pedirMetrica(Metrica.IZQUIERDO) },
+            "Margen derecho…" to { pedirMetrica(Metrica.DERECHO) },
+            "Centrar en el ancho" to { editor.fijarMetrica(Metrica.CENTRAR) },
+            "Ventana de métricas" to { mostrarMetricas() })))
         barraEditor.addView(botonMenu("Vista", listOf(
             "Ajustar a la ventana" to { editor.ajustarVista() },
             "Mostrar u ocultar manijas de todos los puntos" to { editor.opciones.manijasDeTodos = !editor.opciones.manijasDeTodos; editor.invalidate() })))
@@ -363,9 +382,55 @@ class MainActivity : Activity() {
         b.setTextColor(if (activo) Color.WHITE else Color.rgb(30, 30, 40))
     }
 
+    private fun salirDelEditor() {
+        if (editorDesdeMetricas) mostrarMetricas() else mostrarCuadricula()
+    }
+
+    private fun pedirMetrica(m: Metrica) {
+        val actual = when (m) {
+            Metrica.ANCHO -> editor.ancho
+            Metrica.IZQUIERDO -> editor.margenIzquierdo
+            else -> editor.margenDerecho
+        }
+        if (actual == null) { aviso("El glifo no tiene dibujo en Fore: no hay márgenes que cambiar"); return }
+        val campo = EditText(this).apply {
+            setText(Math.round(actual).toString()); selectAll()
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        }
+        AlertDialog.Builder(this).setTitle(m.nombre).setView(campo)
+            .setPositiveButton("Aceptar") { _, _ ->
+                val v = campo.text.toString().toIntOrNull()
+                if (v != null) editor.fijarMetrica(m, v.toDouble()) else aviso("Escribe un número entero")
+            }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    // ------------------------------------------------------------------ Métricas
+
+    private fun construirMetricas() {
+        pantallaMetricas = PantallaMetricas(this, object : PantallaMetricas.Acciones {
+            override fun volver() = mostrarCuadricula()
+            override fun editar(clave: Int) { abrirEditor(clave); editorDesdeMetricas = true }
+            override fun cambiado() { hayCambiosSinExportar = true }
+            override fun etiqueta(clave: Int) = this@MainActivity.etiqueta(clave)
+            override fun dedoEdita() = editor.dedoEdita
+        })
+    }
+
+    private fun mostrarMetricas() {
+        enEditor = false
+        enMetricas = true
+        editorDesdeMetricas = false
+        raiz.removeAllViews()
+        raiz.addView(pantallaMetricas, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        pantallaMetricas.mostrar(ascenso, descenso)
+    }
+
     private fun abrirEditor(codigo: Int) {
         glifoActual = codigo
         enEditor = true
+        enMetricas = false
+        editorDesdeMetricas = false
         etiquetaGlifo.text = etiqueta(codigo)
         editor.cargar(ascenso, descenso)
         raiz.removeAllViews()
@@ -408,15 +473,18 @@ class MainActivity : Activity() {
         val o = editor.opciones
         val cuerpo = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
         val dist = EditText(this).apply { setText(o.snapDistancia.toString()); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
+        val umbral = EditText(this).apply { setText(o.umbralArrastre.toString()); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
         val puntos = CheckBox(this).apply { text = "Ajustar a puntos, guías y métricas"; isChecked = o.snapAPuntos }
         val enteros = CheckBox(this).apply { text = "SnapToInt: coordenadas enteras"; isChecked = o.snapEnteros }
         val manijas = CheckBox(this).apply { text = "Mostrar manijas de todos los puntos"; isChecked = o.manijasDeTodos }
         val dedo = CheckBox(this).apply { text = "Usar el dedo como lápiz (sin S Pen)"; isChecked = editor.dedoEdita }
         cuerpo.addView(TextView(this).apply { text = "SnapDistance (píxeles)" }); cuerpo.addView(dist)
+        cuerpo.addView(TextView(this).apply { text = "Movimiento mínimo para arrastrar puntos (píxeles). Súbelo si los puntos se mueven al seleccionarlos." }); cuerpo.addView(umbral)
         cuerpo.addView(puntos); cuerpo.addView(enteros); cuerpo.addView(manijas); cuerpo.addView(dedo)
         AlertDialog.Builder(this).setTitle("Ajustes del editor").setView(cuerpo)
             .setPositiveButton("Aceptar") { _, _ ->
                 o.snapDistancia = (dist.text.toString().toIntOrNull() ?: 10).coerceIn(0, 100)
+                o.umbralArrastre = (umbral.text.toString().toIntOrNull() ?: 12).coerceIn(0, 100)
                 o.snapAPuntos = puntos.isChecked
                 o.snapEnteros = enteros.isChecked
                 o.manijasDeTodos = manijas.isChecked
@@ -430,7 +498,7 @@ class MainActivity : Activity() {
     private fun guardarAjustes() {
         val o = editor.opciones
         getSharedPreferences("ajustes", MODE_PRIVATE).edit()
-            .putInt("snapDistancia", o.snapDistancia).putBoolean("snapEnteros", o.snapEnteros)
+            .putInt("snapDistancia", o.snapDistancia).putInt("umbralArrastre", o.umbralArrastre).putBoolean("snapEnteros", o.snapEnteros)
             .putBoolean("snapAPuntos", o.snapAPuntos).putBoolean("manijasDeTodos", o.manijasDeTodos)
             .putBoolean("dedoEdita", editor.dedoEdita).apply()
     }
@@ -439,6 +507,7 @@ class MainActivity : Activity() {
         val o = editor.opciones
         val sp = getSharedPreferences("ajustes", MODE_PRIVATE)
         o.snapDistancia = sp.getInt("snapDistancia", 10)
+        o.umbralArrastre = sp.getInt("umbralArrastre", 12)
         o.snapEnteros = sp.getBoolean("snapEnteros", false)
         o.snapAPuntos = sp.getBoolean("snapAPuntos", true)
         o.manijasDeTodos = sp.getBoolean("manijasDeTodos", false)
