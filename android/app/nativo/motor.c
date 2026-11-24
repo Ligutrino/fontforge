@@ -33,6 +33,9 @@
 #include "uiinterface.h"
 #include "ustring.h"
 #include "gimage.h"
+#include "lookups.h"
+#include "splineutil.h"
+#include "tottfgpos.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -499,4 +502,139 @@ int motor_image_pixels(int clave, int capa, int indice, int *salida, int max) {
         return w * h;
     }
     return -1;
+}
+
+/* ---- Métricas y kerning (paso 4) ---- */
+
+static int clave_de(SplineChar *sc) {
+    return sc->unicodeenc >= 0 ? sc->unicodeenc : -(sc->orig_pos + 2);
+}
+
+/* Busca un glifo por su nombre (para escribir "/one.peq" en la ventana de métricas). */
+int motor_glyph_by_name(const char *nombre, int *clave) {
+    if (!tiene_fuente() || nombre == NULL) return 0;
+    SplineChar *sc = SFGetChar(fv_actual->sf, -1, nombre);
+    if (sc == NULL) return 0;
+    *clave = clave_de(sc);
+    return 1;
+}
+
+/* Mueve en horizontal las imágenes de todas las capas del glifo (al cambiar el margen izquierdo). */
+int motor_shift_images(int clave, double dx) {
+    SplineChar *sc = buscar(clave, 0);
+    if (sc == NULL) return 0;
+    for (int ly = 0; ly < sc->layer_cnt; ++ly)
+        for (ImageList *il = sc->layers[ly].images; il != NULL; il = il->next) {
+            il->xoff += dx;
+            il->bb.minx += dx; il->bb.maxx += dx;
+        }
+    SCCharChangedUpdate(sc, ly_fore);
+    return 1;
+}
+
+/*
+ * Clase de kerning que cubre el par (copia de SFFindKernClass, que vive en la interfaz
+ * de escritorio y no en libfontforge). Primero solo clases definidas, después la clase 0.
+ */
+static KernClass *clase_del_par(SplineChar *a, SplineChar *b, int *indice) {
+    for (int i = 0; i <= 2; ++i)
+        for (KernClass *kc = fv_actual->sf->kerns; kc != NULL; kc = kc->next) {
+            int definida0 = kc->firsts[0] != NULL;
+            int f = KCFindName(a->name, kc->firsts, kc->first_cnt, i % 2);
+            int l = KCFindName(b->name, kc->seconds, kc->second_cnt, i % 2);
+            if (f != -1 && l != -1 && (definida0 || f != 0 || l != 0)) {
+                if (i > 1 || kc->offsets[f * kc->second_cnt + l] != 0) {
+                    *indice = f * kc->second_cnt + l;
+                    return kc;
+                }
+            }
+        }
+    return NULL;
+}
+
+static KernPair *par_de(SplineChar *a, SplineChar *b) {
+    for (KernPair *kp = a->kerns; kp != NULL; kp = kp->next)
+        if (kp->sc == b) return kp;
+    return NULL;
+}
+
+/* Kerning entre dos glifos. origen: 0 nada, 1 par, 2 clase. */
+int motor_get_kern(int izq, int der, int *origen) {
+    int o = 0, v = 0;
+    SplineChar *a = buscar(izq, 0), *b = buscar(der, 0);
+    if (a != NULL && b != NULL) {
+        KernPair *kp = par_de(a, b);
+        int ind;
+        KernClass *kc;
+        if (kp != NULL && kp->off != 0) { o = 1; v = kp->off; }
+        else if ((kc = clase_del_par(a, b, &ind)) != NULL) { o = 2; v = kc->offsets[ind]; }
+    }
+    if (origen != NULL) *origen = o;
+    return v;
+}
+
+/*
+ * Fija el kerning del par, como la ventana de métricas de FontForge: si hay un par
+ * propio se cambia; si no, y una clase lo cubre con un valor, se cambia la clase
+ * (afecta a todos sus pares); si no, se crea un par en la subtabla 'kern'.
+ */
+int motor_set_kern(int izq, int der, int valor) {
+    if (!tiene_fuente()) return 0;
+    SplineChar *a = buscar(izq, valor != 0), *b = buscar(der, valor != 0);
+    if (a == NULL || b == NULL) return valor == 0;
+    KernPair *kp = par_de(a, b);
+    int ind;
+    KernClass *kc = (kp == NULL || kp->off == 0) ? clase_del_par(a, b, &ind) : NULL;
+    if (kc != NULL && kc->offsets[ind] != 0) {
+        kc->offsets[ind] = valor;
+    } else if (valor == 0) {
+        if (kp != NULL) {
+            KernPair **h = &a->kerns;
+            while (*h != kp) h = &(*h)->next;
+            *h = kp->next;
+            DeviceTableFree(kp->adjust);
+            chunkfree(kp, sizeof(KernPair));
+        }
+    } else {
+        if (kp == NULL) {
+            kp = chunkalloc(sizeof(KernPair));
+            kp->sc = b;
+            kp->subtable = SFSubTableFindOrMake(fv_actual->sf, CHR('k','e','r','n'), SCScriptFromUnicode(a), gpos_pair);
+            kp->next = a->kerns;
+            a->kerns = kp;
+        }
+        if (kp->off != valor) { DeviceTableFree(kp->adjust); kp->adjust = NULL; }
+        kp->off = valor;
+    }
+    fv_actual->sf->changed = 1;
+    return 1;
+}
+
+/* Pares de kerning propios (no las clases): tríos izq, der, valor. Devuelve la cantidad de pares. */
+int motor_kern_pairs(int *salida, int max) {
+    if (!tiene_fuente()) return 0;
+    SplineFont *sf = fv_actual->sf;
+    int n = 0;
+    for (int gid = 0; gid < sf->glyphcnt; ++gid) {
+        SplineChar *sc = sf->glyphs[gid];
+        if (sc == NULL) continue;
+        for (KernPair *kp = sc->kerns; kp != NULL; kp = kp->next) {
+            if (kp->off == 0 || kp->sc == NULL) continue;
+            if (3 * (n + 1) <= max) {
+                salida[3 * n] = clave_de(sc);
+                salida[3 * n + 1] = clave_de(kp->sc);
+                salida[3 * n + 2] = kp->off;
+            }
+            ++n;
+        }
+    }
+    return n;
+}
+
+/* Cantidad de clases de kerning (solo para avisar que existen). */
+int motor_kern_class_count(void) {
+    if (!tiene_fuente()) return 0;
+    int n = 0;
+    for (KernClass *kc = fv_actual->sf->kerns; kc != NULL; kc = kc->next) ++n;
+    return n;
 }

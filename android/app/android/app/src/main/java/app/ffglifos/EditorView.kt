@@ -37,10 +37,12 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
         fun informar(texto: String)
         /** Imágenes de fondo de una capa (en FontForge suelen ir en Atrás). */
         fun imagenes(capa: Int): List<ImagenFondo> = emptyList()
+        /** Mueve en horizontal las imágenes del glifo en el motor. */
+        fun moverImagenes(dx: Double) {}
     }
 
     /** Imagen colocada en el glifo: esquina superior izquierda (x, y) y tamaño de un píxel en unidades. */
-    class ImagenFondo(val bmp: Bitmap, val x: Double, val y: Double, val escalaX: Double, val escalaY: Double)
+    class ImagenFondo(val bmp: Bitmap, var x: Double, val y: Double, val escalaX: Double, val escalaY: Double)
 
     private val imagenes = HashMap<Int, List<ImagenFondo>>()
     private val pImagen = Paint().apply { isFilterBitmap = false }   // píxeles nítidos al hacer zoom
@@ -72,7 +74,9 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
     private var descenso = 200.0
 
     // ---- Historial ----
-    private class Estado(val capas: Map<Int, Glifo>)
+    private class Estado(val capas: Map<Int, Glifo>, val dxImagenes: Double)
+    /** Cuánto se han movido las imágenes desde que se abrió el glifo (para deshacer). */
+    private var dxImagenes = 0.0
     private val deshacerPila = ArrayDeque<Estado>()
     private val rehacerPila = ArrayDeque<Estado>()
 
@@ -159,13 +163,14 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
         imagenes.clear()
         for (c in listOf(Capa.ATRAS, Capa.FORE)) imagenes[c] = try { puente.imagenes(c) } catch (e: OutOfMemoryError) { emptyList() }
         deshacerPila.clear(); rehacerPila.clear()
+        dxImagenes = 0.0
         finGesto()
         vistaLista = false
         invalidate()
         informar()
     }
 
-    private fun foto() = Estado(capas.mapValues { it.value.copia() })
+    private fun foto() = Estado(capas.mapValues { it.value.copia() }, dxImagenes)
 
     fun guardarEstado() {
         deshacerPila.addLast(foto())
@@ -175,6 +180,7 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
 
     private fun restaurar(e: Estado) {
         for ((c, g) in e.capas) { capas[c] = g; puente.guardar(c, g) }
+        moverImagenes(e.dxImagenes - dxImagenes)
         invalidate(); informar()
     }
 
@@ -222,6 +228,29 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
         guardarEstado()
         if (Geometria.hacerLinea(activa)) confirmar() else { deshacerPila.removeLastOrNull(); aviso("Selecciona los dos puntos de los extremos del tramo") }
     }
+
+    private fun moverImagenes(dx: Double) {
+        if (dx == 0.0) return
+        for (im in imagenes.values.flatten()) im.x += dx
+        dxImagenes += dx
+        puente.moverImagenes(dx)
+    }
+
+    /** Métricas › Ancho, márgenes o centrar (mueve también la capa Atrás y sus imágenes). */
+    fun fijarMetrica(m: Metrica, valor: Double = 0.0) {
+        val antes = foto()
+        val dx = Metricas.aplicar(fore, capas.getValue(Capa.ATRAS), m, valor)
+        if (dx == null) { aviso("El glifo no tiene dibujo en Fore: no hay márgenes que cambiar"); return }
+        deshacerPila.addLast(antes); if (deshacerPila.size > 100) deshacerPila.removeFirst(); rehacerPila.clear()
+        puente.guardar(Capa.FORE, fore)
+        puente.guardar(Capa.ATRAS, capas.getValue(Capa.ATRAS))
+        moverImagenes(dx)
+        invalidate(); informar()
+    }
+
+    val ancho get() = fore.ancho
+    val margenIzquierdo get() = Metricas.izquierdo(fore)
+    val margenDerecho get() = Metricas.derecho(fore)
 
     /** Mueve la selección con las flechas: 1 unidad, o 10 con Shift. */
     fun empujar(dx: Int, dy: Int) {
@@ -312,6 +341,11 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
         canvas.drawLine(sx(0.0), 0f, sx(0.0), h, pMetrica)
         canvas.drawLine(sx(fore.ancho), 0f, sx(fore.ancho), h, pAncho)
         canvas.drawText("ancho ${fore.ancho.roundToInt()}", sx(fore.ancho) + 4 * densidad, anchoRegla + 14 * densidad, pTexto)
+        Metricas.limitesX(fore)?.let { lim ->
+            val yb = sy(-descenso) + 14 * densidad
+            canvas.drawText("izq ${Metricas.texto(lim[0])}", sx(0.0) + 4 * densidad, yb, pTexto)
+            canvas.drawText("der ${Metricas.texto(fore.ancho - lim[1])}", sx(fore.ancho) + 4 * densidad, yb, pTexto)
+        }
 
         // Capas: Atrás, Guía, Fore
         if (visible[Capa.ATRAS] == true) canvas.drawPath(camino(capas.getValue(Capa.ATRAS)), pAtras)
@@ -533,6 +567,10 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
     }
 
     private fun lapizMovido(x: Float, y: Float, ultimo: Boolean) {
+        // Al tocar para seleccionar, el lápiz tiembla un poco: no arrastrar puntos, manijas ni el ancho
+        // hasta que se mueva más que el umbral.
+        if (!cambioEnGesto && (modo == Modo.MOVER || modo == Modo.MANIJA_PREV || modo == Modo.MANIJA_NEXT || modo == Modo.ANCHO) &&
+            hypot(x - sx0, y - sy0) < opciones.umbralArrastre * densidad) return
         val fxv = fx(x); val fyv = fy(y)
         when (modo) {
             Modo.TRAZO -> {
@@ -970,6 +1008,8 @@ class EditorView(context: Context, private val puente: Puente) : View(context) {
             partes += "x ${fmt(p.x)} y ${fmt(p.y)} ($tipo)"
         } else if (sel.size > 1) partes += "${sel.size} puntos seleccionados"
         partes += "ancho ${fore.ancho.roundToInt()}"
+        partes += "izq ${Metricas.texto(margenIzquierdo)}"
+        partes += "der ${Metricas.texto(margenDerecho)}"
         puente.informar(partes.joinToString("  ·  "))
     }
 
