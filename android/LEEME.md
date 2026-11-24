@@ -11,7 +11,7 @@ Descomprime este paquete en la misma carpeta `fontforge-android` del paso 2, par
 
 ```bash
 cd ~/ruta/donde/esta            # la carpeta que contiene fontforge-android/
-tar xzf ffglifos-kerning.tar.gz # reemplaza los scripts y app/
+tar xzf ffglifos-iconos.tar.gz  # reemplaza los scripts y app/
 cd fontforge-android
 chmod +x compilar.sh
 ./compilar.sh
@@ -46,6 +46,7 @@ A la izquierda está la **caja de herramientas** en dos columnas, como en FontFo
 | ⟲ Rotar en 3D | ⏢ Perspectiva |
 | ▭ Rectángulo/elipse | ⬠ Polígono/estrella |
 
+- Los íconos son los mismos de FontForge de escritorio (tema tango). Si pasas el S Pen por encima sin tocar, aparece el nombre de la herramienta. La elegida para la punta va sobre fondo gris y la del botón lateral lleva un marco naranja. Debajo, **Mse1** y **^Mse1** muestran sus íconos pequeños, como en FontForge.
 - **Toca** una herramienta para usarla con la punta del S Pen (Mse1). **Mantenla presionada** para asignarla al **botón lateral** (^Mse1, el Ctrl + clic de FontForge). Debajo de la caja se ven las dos.
 - Toca otra vez Rectángulo/elipse o Polígono/estrella para ver sus opciones: elipse, desde el centro, número de lados, estrella y radio interior.
 - Con Pluma o Agregar punto, se sigue dibujando desde el extremo seleccionado. Tocar el primer punto cierra el contorno. Para empezar otro contorno, toca la herramienta otra vez.
@@ -125,4 +126,4 @@ Envíame las últimas 40 líneas de `./compilar.sh`. Si la app se cierra sola en
 | `app/android/` | La app en Kotlin: `EditorView.kt` (lienzo, herramientas y S Pen), `Geometria.kt` (cuchillo, transformaciones y figuras), `MainActivity.kt` (pantallas, menús y archivos), `Metricas.kt`, `MetricasView.kt` y `PantallaMetricas.kt` (métricas y kerning) |
 | `prueba.pe` | Prueba del motor por consola (paso 2) |
 
-Licencia: GPLv3 o posterior, igual que FontForge.
+Licencia: GPLv3 o posterior, igual que FontForge. Los íconos de `res/drawable-nodpi/ff_*.png` vienen de `fontforgeexe/pixmaps/tango` de FontForge, salvo `ff_borrar*`, que se hizo para esta app.

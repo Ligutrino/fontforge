@@ -252,7 +252,9 @@ class MainActivity : Activity() {
     private lateinit var panelCapas: LinearLayout
     private lateinit var botonShift: Button
     private lateinit var botonCtrl: Button
-    private val botonesCaja = HashMap<Herramienta, Button>()
+    private val botonesCaja = HashMap<Herramienta, BotonHerramienta>()
+    private lateinit var iconoMse: IconoMini
+    private lateinit var iconoMseBoton: IconoMini
     private lateinit var zonaEditor: LinearLayout
 
     private fun construirEditor() {
@@ -301,13 +303,8 @@ class MainActivity : Activity() {
         // Caja de herramientas: dos columnas, como en FontForge
         caja = GridLayout(this).apply { columnCount = 2; setPadding(dp(4), dp(4), dp(4), dp(4)) }
         for (h in Herramienta.values()) {
-            val b = Button(this).apply {
-                text = "${h.simbolo}\n${h.nombre}"
-                isAllCaps = false
-                textSize = 10f
-                maxLines = 3
-                setPadding(dp(2), dp(2), dp(2), dp(2))
-                layoutParams = GridLayout.LayoutParams().apply { width = dp(62); height = dp(56); setMargins(dp(2), dp(2), dp(2), dp(2)) }
+            val b = BotonHerramienta(this, h, editor.opciones).apply {
+                isClickable = true
                 setOnClickListener {
                     if (editor.herramientaLapiz == h && h.tieneOpciones) mostrarOpciones(h)
                     else if (editor.herramientaLapiz == h && (h == Herramienta.PLUMA || h.tipoPunto != null)) editor.deseleccionar()   // empezar otro contorno
@@ -319,13 +316,22 @@ class MainActivity : Activity() {
             botonesCaja[h] = b
             caja.addView(b)
         }
-        etiquetaMse = TextView(this).apply { textSize = 11f; setTextColor(Color.rgb(60, 65, 80)); setPadding(dp(6), dp(6), dp(6), dp(6)) }
+        etiquetaMse = TextView(this).apply { textSize = 11f; setTextColor(Color.rgb(60, 65, 80)); setPadding(dp(6), dp(2), dp(6), dp(6)); maxWidth = dp(90) }
+        iconoMse = IconoMini(this); iconoMseBoton = IconoMini(this)
+        // Como en FontForge: Mse1 y ^Mse1 con el ícono pequeño de su herramienta
+        fun filaMse(texto: String, icono: IconoMini) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(6), dp(2), dp(6), dp(2))
+            addView(TextView(context).apply { text = texto; textSize = 12f; setTextColor(Color.rgb(46, 52, 54)); minWidth = dp(44) })
+            addView(icono)
+        }
         val columnaCaja = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(232, 234, 240))
+            setBackgroundColor(Color.rgb(238, 238, 236))
             addView(caja)
+            addView(filaMse("Mse1", iconoMse))
+            addView(filaMse("^Mse1", iconoMseBoton))
             addView(etiquetaMse)
-            addView(TextView(context).apply { text = "Toca: herramienta del lápiz.\nMantén: herramienta del botón lateral."; textSize = 10f; setTextColor(Color.rgb(110, 115, 130)); setPadding(dp(6), 0, dp(6), dp(8)) })
+            addView(TextView(context).apply { text = "Toca: lápiz.\nMantén: botón lateral."; textSize = 10f; setTextColor(Color.rgb(110, 115, 130)); setPadding(dp(6), 0, dp(6), dp(8)); maxWidth = dp(90) })
         }
         val desplazaCaja = ScrollView(this).apply { addView(columnaCaja) }
 
@@ -369,12 +375,12 @@ class MainActivity : Activity() {
     private fun actualizarCaja() {
         if (!::etiquetaMse.isInitialized) return
         for ((h, b) in botonesCaja) {
-            val lapiz = editor.herramientaLapiz == h
-            val lateral = editor.herramientaBoton == h
-            b.setBackgroundColor(when { lapiz -> Color.rgb(40, 90, 200); lateral -> Color.rgb(255, 210, 150); else -> Color.rgb(250, 250, 252) })
-            b.setTextColor(if (lapiz) Color.WHITE else Color.rgb(30, 30, 40))
+            b.delLapiz = editor.herramientaLapiz == h
+            b.delBoton = editor.herramientaBoton == h
         }
-        etiquetaMse.text = "Mse1 (lápiz): ${editor.herramientaLapiz.nombre}\n^Mse1 (botón lateral): ${editor.herramientaBoton.nombre}"
+        iconoMse.archivo = "ff_mini_" + Iconos.nombreMini(editor.herramientaLapiz, editor.opciones)
+        iconoMseBoton.archivo = "ff_mini_" + Iconos.nombreMini(editor.herramientaBoton, editor.opciones)
+        etiquetaMse.text = editor.herramientaLapiz.nombre
     }
 
     private fun marcar(b: Button, activo: Boolean) {
@@ -450,7 +456,7 @@ class MainActivity : Activity() {
             val centro = CheckBox(this).apply { text = "Arrastrar desde el centro"; isChecked = o.desdeCentro }
             cuerpo.addView(elipse); cuerpo.addView(centro)
             AlertDialog.Builder(this).setTitle("Rectángulo/elipse").setView(cuerpo)
-                .setPositiveButton("Aceptar") { _, _ -> o.elipse = elipse.isChecked; o.desdeCentro = centro.isChecked }
+                .setPositiveButton("Aceptar") { _, _ -> o.elipse = elipse.isChecked; o.desdeCentro = centro.isChecked; actualizarCaja() }
                 .setNegativeButton("Cancelar", null).show()
         } else {
             val lados = EditText(this).apply { setText(o.lados.toString()); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
@@ -464,6 +470,7 @@ class MainActivity : Activity() {
                     o.lados = (lados.text.toString().toIntOrNull() ?: 5).coerceIn(3, 60)
                     o.estrella = estrella.isChecked
                     o.radioInterior = ((interior.text.toString().toIntOrNull() ?: 50).coerceIn(5, 95)) / 100.0
+                    actualizarCaja()
                 }
                 .setNegativeButton("Cancelar", null).show()
         }
